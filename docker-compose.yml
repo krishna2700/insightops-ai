@@ -1,0 +1,53 @@
+name: insightops-ai
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: insightops
+      POSTGRES_PASSWORD: insightops
+      POSTGRES_DB: insightops
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./backend/db-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insightops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://insightops:insightops@db:5432/insightops
+      ANALYTICS_DATABASE_URL: postgresql+psycopg://analytics_readonly:analytics_readonly@db:5432/insightops
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
